@@ -1,4 +1,3 @@
-
 class Order:
     TAX_RATE = 0.08  # 8% налог
     SERVICE_CHARGE = 0.05  # 5% сервисный сбор
@@ -75,6 +74,7 @@ class Customer:
 
     def __str__(self):
         return f"Customer: {self.name}, Membership: {self.membership}"
+
 # Пример использования
 
 # Создаем блюда
