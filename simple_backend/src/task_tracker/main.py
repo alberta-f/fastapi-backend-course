@@ -1,26 +1,30 @@
 from fastapi import FastAPI
-import requests, json
+import requests
 
 
 class TaskTracker:
-    API_URL='https://api.jsonbin.io/v3/b/67bf3b70acd3cb34a8f14db1'
+    JSON_API_URL='https://api.jsonbin.io/v3/b/67bf38a4e41b4d34e49d1a32'
 
     def __init__(self):
         self.tasks = self.load_tasks()
 
 
     def load_tasks(self):  
-        response = requests.get(self.API_URL, headers={"X-Master-Key": "$2a$10$JxRxV.l5ecxD7r4BNJp5/Od.22A1TlqgdLRUfhN73oSaCMQQ9SMkq"})
-        return response.json().get("record", {}) 
+        response = requests.get(self.JSON_API_URL, headers={"X-Master-Key": "$2a$10$JxRxV.l5ecxD7r4BNJp5/Od.22A1TlqgdLRUfhN73oSaCMQQ9SMkq"})
+        return response.json().get('record', {})
 
 
     def dump_tasks(self): 
-        requests.put(self.API_URL, json={"record": self.tasks}, headers={"X-Master-Key": "$2a$10$JxRxV.l5ecxD7r4BNJp5/Od.22A1TlqgdLRUfhN73oSaCMQQ9SMkq"})
+        requests.put(self.JSON_API_URL, json=self.tasks, headers={"X-Master-Key": "$2a$10$JxRxV.l5ecxD7r4BNJp5/Od.22A1TlqgdLRUfhN73oSaCMQQ9SMkq"})
     
 
     def add_task(self, task, done):
         new_id = max(map(int, self.tasks.keys()), default=0) + 1
         new_id = str(new_id)
+
+        llm_response = llm_client.process_task(task)
+        explanation = llm_response.get("result", {}).get("response", "LLM не смог дать ответ.")
+        task = f'{task}, {explanation}'
 
         self.tasks[new_id] = {"task": task, "done": done}  
 
@@ -59,8 +63,41 @@ class TaskTracker:
         return False
 
 
+class LLMClient():
+    LLM_API_URL = 'https://api.cloudflare.com/client/v4/accounts/f4b07696c503717ccc919e44f454ded1/ai/run/'
+    headers = {"Authorization": "Bearer KAj0xrVIDWmgLD0b1dHLpvFBOavtume7IGTQIgvu"}
+    model = '@cf/meta/llama-3-8b-instruct'
+
+    def __init__(self):
+        self.inputs = []
+        self.initialized = False
+
+
+    def add_input(self, content, role='user'):
+        self.inputs.append({"role": role, "prompt": content})
+
+
+    def run(self):
+        input = {"prompt": self.inputs}
+        response = requests.post(f"{self.LLM_API_URL}{self.model}", headers=self.headers, json=input)
+        return response.json()
+    
+
+    def process_task(self, task_text: str):
+        self.inputs = []
+        
+        if not self.initialized:
+            self.inputs.append({"role": "system", "prompt": "You are an AI assistant that helps solve tasks by generating step-by-step solutions."})
+            self.initialized = True
+        
+        self.add_input(f"Explain how to solve this task: {task_text}")
+        return self.run()
+
+
 app = FastAPI()
 task_tracker = TaskTracker()
+llm_client = LLMClient()
+
 
 @app.get("/tasks")  
 def get_tasks():
