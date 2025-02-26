@@ -1,27 +1,23 @@
 from fastapi import FastAPI
-from pathlib import Path
-import json
+import requests, json
 
 
 class TaskTracker:
-    def __init__(self, file='tasks.json'):
-        self.file = Path(file)
+    API_URL='https://api.jsonbin.io/v3/b/67bf3b70acd3cb34a8f14db1'
+
+    def __init__(self):
         self.tasks = self.load_tasks()
 
 
-    def load_tasks(self):
-        if self.file.exists():
-            with open('tasks.json', 'r', encoding='utf8') as data:
-                return json.load(data)
-
-        return {}
+    def load_tasks(self):  
+        response = requests.get(self.API_URL, headers={"X-Master-Key": "$2a$10$JxRxV.l5ecxD7r4BNJp5/Od.22A1TlqgdLRUfhN73oSaCMQQ9SMkq"})
+        return response.json().get("record", {}) 
 
 
-    def dump_tasks(self):
-        with open('tasks.json', 'w', encoding='utf8') as file:
-            json.dump(self.tasks, file, indent=4)
-
+    def dump_tasks(self): 
+        requests.put(self.API_URL, json={"record": self.tasks}, headers={"X-Master-Key": "$2a$10$JxRxV.l5ecxD7r4BNJp5/Od.22A1TlqgdLRUfhN73oSaCMQQ9SMkq"})
     
+
     def add_task(self, task, done):
         new_id = max(map(int, self.tasks.keys()), default=0) + 1
         new_id = str(new_id)
