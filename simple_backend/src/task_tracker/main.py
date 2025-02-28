@@ -2,30 +2,51 @@ from fastapi import FastAPI, HTTPException
 import requests
 
 
-class TaskTracker:
+class BaseHTTPClient:
+    def get(self, url, headers=None):
+        try:    
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+
+            return response.json()
+
+        except requests.RequestException as e:
+            raise HTTPException(status_code=500, detail=f"Ошибка при GET-запросе: {str(e)}")
+
+
+    def post(self, url, data, headers=None):
+        try:
+            response = requests.post(url, json=data, headers=headers)
+            response.raise_for_status()
+
+            return response.json()
+
+        except requests.RequestException as e:
+            raise HTTPException(status_code=500, detail=f"Ошибка при POST-запросе: {str(e)}")
+
+    def put(self, url, data, headers=None):
+        try:
+            response = requests.put(url, json=data, headers=headers)
+            response.raise_for_status()
+
+        except requests.RequestException as e:
+            raise HTTPException(status_code=500, detail=f"Ошибка при PUT-запросе: {str(e)}")
+
+
+class TaskTracker(BaseHTTPClient):
     JSON_API_URL='https://api.jsonbin.io/v3/b/67bf38a4e41b4d34e49d1a32'
+    HEADERS={"X-Master-Key": "$2a$10$JxRxV.l5ecxD7r4BNJp5/Od.22A1TlqgdLRUfhN73oSaCMQQ9SMkq"}
 
     def __init__(self):
         self.tasks = self.load_tasks()
 
 
     def load_tasks(self): 
-        try:    
-            response = requests.get(self.JSON_API_URL, headers={"X-Master-Key": "$2a$10$JxRxV.l5ecxD7r4BNJp5/Od.22A1TlqgdLRUfhN73oSaCMQQ9SMkq"})
-            response.raise_for_status()
-
-            return response.json().get('record', {})
-
-        except requests.RequestException:
-            raise HTTPException(status_code=500, detail="Ошибка при загрузке задач")
+        return self.get(self.JSON_API_URL, headers=self.HEADERS).get('record', {})
 
 
     def dump_tasks(self): 
-        try:
-            requests.put(self.JSON_API_URL, json=self.tasks, headers={"X-Master-Key": "$2a$10$JxRxV.l5ecxD7r4BNJp5/Od.22A1TlqgdLRUfhN73oSaCMQQ9SMkq"})
-    
-        except requests.RequestException:
-            raise HTTPException(status_code=500, detail="Ошибка при сохранении задач")
+        self.put(self.JSON_API_URL, self.tasks, headers=self.HEADERS)
 
 
     def add_task(self, task, done):
@@ -67,13 +88,12 @@ class TaskTracker:
 
         del self.tasks[task_id]
         self.dump_tasks()
-        return True
 
 
-class LLMClient():
+class LLMClient(BaseHTTPClient):
     LLM_API_URL = 'https://api.cloudflare.com/client/v4/accounts/f4b07696c503717ccc919e44f454ded1/ai/run/'
-    headers = {"Authorization": "Bearer KAj0xrVIDWmgLD0b1dHLpvFBOavtume7IGTQIgvu"}
-    model = '@cf/meta/llama-3-8b-instruct'
+    HEADERS = {"Authorization": "Bearer KAj0xrVIDWmgLD0b1dHLpvFBOavtume7IGTQIgvu"}
+    MODEL = '@cf/meta/llama-3-8b-instruct'
 
 
     def __init__(self):
@@ -86,13 +106,7 @@ class LLMClient():
 
     def run(self):
         payload = {"messages": self.messages}
-        try:
-            response = requests.post(f"{self.LLM_API_URL}{self.model}", headers=self.headers, json=payload)
-            response.raise_for_status()
-            return response.json()
-
-        except requests.RequestException:
-            raise HTTPException(status_code=500, detail="Ошибка взаимодействия с LLM API")
+        return self.post(f"{self.LLM_API_URL}{self.MODEL}", payload, headers=self.HEADERS)
     
 
     def process_task(self, task_text: str):
@@ -122,11 +136,13 @@ def create_task(task: str, done: bool = False):
 
 @app.put("/tasks/{task_id}", status_code=200)  
 def update_task(task_id: str, task: str = None, done: bool = None):
-    if task_tracker.update_task(task_id, task, done):
-        return {"message": "Задача обновлена", "task": task_tracker.tasks[task_id]}
+    updated_task = task_tracker.update_task(task_id, task, done)
+
+    return {"message": "Задача обновлена", "task": updated_task}
 
 
 @app.delete("/tasks/{task_id}", status_code=204)
 def delete_task(task_id: str):
-    if task_tracker.delete_task(task_id):
-        return {"message": "Задача удалена"}
+    task_tracker.delete_task(task_id)
+
+    return {"message": "Задача удалена"}
